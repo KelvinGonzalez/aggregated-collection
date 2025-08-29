@@ -10,7 +10,8 @@ void main() async {
 }
 
 final AggregatedCollection notesCollection = (CollectionAggregator.instance
-      ..setMaximumDocsPerAggregation(2))
+      ..setMaximumDocsPerAggregation(2)
+      ..setCacheLastDocReferenceFromSnapshotData(true))
     .collection('notes');
 
 class NotesApp extends StatelessWidget {
