@@ -411,7 +411,7 @@ void _showAddNoteDialog(BuildContext context) {
                   'title': titleController.text,
                   'content': contentController.text,
                   'timestamp': FieldValue.serverTimestamp(),
-                });
+                }).then((e) => print("Ref Id: ${e.id}"));
                 Navigator.of(context).pop();
               },
               child: const Text('Add'),

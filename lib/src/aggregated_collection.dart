@@ -5,17 +5,22 @@ class AggregatedCollection {
   static const String subCountKey = "sub_count";
   static const int maximumDocsPerAggregationVal = 100;
   static const bool cacheLastDocReferenceFromSnapshotDataVal = false;
+  static const bool attemptReplaceWhenAddWithIdVal = true;
 
   final CollectionReference<Map<String, dynamic>> _collectionReference;
   final int maximumDocsPerAggregation;
   final bool cacheLastDocReferenceFromSnapshotData;
+  final bool attemptReplaceWhenAddWithId;
 
   DocumentReference? _documentReference;
 
-  AggregatedCollection(this._collectionReference,
-      {this.maximumDocsPerAggregation = maximumDocsPerAggregationVal,
-      this.cacheLastDocReferenceFromSnapshotData =
-          cacheLastDocReferenceFromSnapshotDataVal});
+  AggregatedCollection(
+    this._collectionReference, {
+    this.maximumDocsPerAggregation = maximumDocsPerAggregationVal,
+    this.cacheLastDocReferenceFromSnapshotData =
+        cacheLastDocReferenceFromSnapshotDataVal,
+    this.attemptReplaceWhenAddWithId = attemptReplaceWhenAddWithIdVal,
+  });
 
   Future<DocumentSnapshot?> _getDocFromSubId(String id) async {
     return (await _collectionReference
@@ -73,10 +78,26 @@ class AggregatedCollection {
     return _expandQuerySnapshot(documents);
   }
 
-  Future<void> add(Map<String, dynamic> data, [String? id]) async {
+  Future<AggregatedDocumentReference?> _replace(
+      String id, Map<String, dynamic> data) async {
+    final reference = await doc(id);
+    reference?.set(data);
+    return reference;
+  }
+
+  Future<AggregatedDocumentReference> add(Map<String, dynamic> data,
+      [String? id]) async {
+    if (attemptReplaceWhenAddWithId && id != null) {
+      final reference = await _replace(id, data);
+      if (reference != null) {
+        return reference;
+      }
+    }
+
     id ??= const UuidV4().generate();
+    var reference = _documentReference;
     if (!cacheLastDocReferenceFromSnapshotData) {
-      _documentReference = (await _collectionReference
+      reference = (await _collectionReference
               .where(subCountKey, isLessThan: maximumDocsPerAggregation)
               .limit(1)
               .get())
@@ -84,18 +105,19 @@ class AggregatedCollection {
           .firstOrNull
           ?.reference;
     }
-    if (_documentReference == null) {
-      await _collectionReference.add({
+    if (reference == null) {
+      reference = await _collectionReference.add({
         id: data,
         subIdsKey: [id],
         subCountKey: 1
       });
-      return;
+    } else {
+      await reference.update({
+        id: data,
+        subIdsKey: FieldValue.arrayUnion([id]),
+        subCountKey: FieldValue.increment(1)
+      });
     }
-    await _documentReference!.update({
-      id: data,
-      subIdsKey: FieldValue.arrayUnion([id]),
-      subCountKey: FieldValue.increment(1)
-    });
+    return AggregatedDocumentReference(reference, id: id);
   }
 }
